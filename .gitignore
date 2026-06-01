@@ -27,3 +27,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+
+# local scratch / scraping outputs and personal working files
+/scratch/
+/My contents/
+.playwright-mcp/
+
+# Claude Code config (treated as local/personal for this repo)
+.claude/
