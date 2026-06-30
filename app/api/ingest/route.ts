@@ -21,6 +21,13 @@ function chunkText(text: string, maxTokens = 500, overlapTokens = 50): string[] 
 }
 
 export async function POST() {
+  if (process.env.VERCEL) {
+    return NextResponse.json(
+      { ok: false, error: "Re-ingestion runs locally only. Commit embeddings.json to deploy updated corpus." },
+      { status: 400 }
+    );
+  }
+
   try {
     const voyageKey = process.env.VOYAGE_API_KEY;
     if (!voyageKey) {
