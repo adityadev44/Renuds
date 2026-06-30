@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 
 type Status = "idle" | "loading" | "done";
+type IngestStatus = "idle" | "running" | "done" | "error";
 
 const EXAMPLES = [
   "How do I eval an agent?",
@@ -38,6 +39,8 @@ export default function Home() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [status, setStatus] = useState<Status>("idle");
+  const [ingestStatus, setIngestStatus] = useState<IngestStatus>("idle");
+  const [ingestMsg, setIngestMsg] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const idle = status === "idle";
@@ -58,6 +61,26 @@ export default function Home() {
     const a = await askRenuds(trimmed);
     setAnswer(a);
     setStatus("done");
+  }
+
+  async function triggerIngest() {
+    if (ingestStatus === "running") return;
+    setIngestStatus("running");
+    setIngestMsg("");
+    try {
+      const res = await fetch("/api/ingest", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setIngestStatus("done");
+        setIngestMsg(`${data.chunks} chunks from ${data.sources} files`);
+      } else {
+        setIngestStatus("error");
+        setIngestMsg(data.error ?? "Unknown error");
+      }
+    } catch {
+      setIngestStatus("error");
+      setIngestMsg("Network error — is the dev server running?");
+    }
   }
 
   function reset() {
@@ -168,6 +191,23 @@ export default function Home() {
                 {q}
               </button>
             ))}
+          </div>
+        )}
+
+        {idle && (
+          <div className="mt-16 flex flex-col items-center gap-1.5">
+            <button
+              onClick={triggerIngest}
+              disabled={ingestStatus === "running"}
+              className="text-xs text-zinc-300 transition-colors hover:text-zinc-500 disabled:cursor-not-allowed"
+            >
+              {ingestStatus === "running" ? "Ingesting…" : "Re-ingest corpus"}
+            </button>
+            {ingestMsg && (
+              <p className={`text-xs ${ingestStatus === "error" ? "text-red-400" : "text-zinc-400"}`}>
+                {ingestMsg}
+              </p>
+            )}
           </div>
         )}
 
