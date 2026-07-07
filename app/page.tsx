@@ -11,34 +11,14 @@ const EXAMPLES = [
   "Explain inverse scaling.",
 ];
 
-// --- Answer seam -----------------------------------------------------------
-// Placeholder until the RAG retrieval backend is wired. Swapping this for
-//   const res = await fetch("/api/ask", { method: "POST", body: JSON.stringify({ q }) });
-//   return (await res.json()).answer;
-// is the only change needed. No fabricated citations here.
-const CANNED: Record<string, string> = {
-  "what is rag?":
-    "RAG (Retrieval-Augmented Generation) pairs a language model with a retrieval step. Instead of relying only on what the model memorized in training, the system first fetches relevant passages from an external corpus, then conditions its answer on them. This grounds responses in real source material, reduces hallucination, and lets you update knowledge by changing the corpus rather than retraining. It's the architecture Renuds itself is built on.",
-  "how do i eval an agent?":
-    "Evaluate an agent on whether it accomplishes tasks, not just whether individual replies look good. Start from a dataset of representative tasks with explicit success criteria, then combine three layers: (1) end-to-end outcome checks — did it reach the goal? (2) trajectory checks — did it call the right tools, in a sensible order, without wasted steps? and (3) LLM-as-judge or human review for open-ended quality. Do error analysis on failures, turn recurring ones into regression tests, and re-run the suite every time you change a prompt, tool, or model.",
-  "explain inverse scaling.":
-    "Inverse scaling is when a model gets worse at a task as it gets larger — even though scale usually helps. It surfaces tasks where bigger models more confidently learn the wrong heuristic: repeating a memorized pattern, following a misleading prompt, or trusting surface cues over the actual instruction. It matters because it shows scale isn't a guaranteed fix — some failures live in the training objective or prompt framing and need better data, framing, or signals rather than more parameters.",
-};
-
-async function askRenuds(q: string): Promise<string> {
-  await new Promise((r) => setTimeout(r, 800));
-  return (
-    CANNED[q.trim().toLowerCase()] ??
-    "This is a preview of the Renuds answer surface. The retrieval pipeline that fetches and cites sources from the AI/ML canon isn't connected yet — once it is, a grounded, cited answer will appear here. Try one of the example questions to see the experience."
-  );
-}
-// ---------------------------------------------------------------------------
+type Source = { source: string; score: number; text: string };
 
 export default function Home() {
   const [input, setInput] = useState("");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [status, setStatus] = useState<Status>("idle");
+  const [sources, setSources] = useState<Source[]>([]);
   const [ingestStatus, setIngestStatus] = useState<IngestStatus>("idle");
   const [ingestMsg, setIngestMsg] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -57,9 +37,21 @@ export default function Home() {
     if (!trimmed || status === "loading") return;
     setQuestion(trimmed);
     setAnswer("");
+    setSources([]);
     setStatus("loading");
-    const a = await askRenuds(trimmed);
-    setAnswer(a);
+    try {
+      const res = await fetch("/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Unknown error");
+      setAnswer(data.answer);
+      setSources(data.sources ?? []);
+    } catch (err) {
+      setAnswer(`Error: ${err instanceof Error ? err.message : "Something went wrong"}`);
+    }
     setStatus("done");
   }
 
@@ -87,6 +79,7 @@ export default function Home() {
     setInput("");
     setQuestion("");
     setAnswer("");
+    setSources([]);
     setStatus("idle");
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
@@ -229,11 +222,23 @@ export default function Home() {
               )}
             </div>
 
-            {status === "done" && (
-              <p className="mt-8 border-t border-zinc-100 pt-4 text-xs text-zinc-400">
-                Preview — answers aren&rsquo;t yet grounded in retrieved sources.
-                Citations will appear here once the RAG pipeline is connected.
-              </p>
+            {status === "done" && sources.length > 0 && (
+              <div className="mt-8 border-t border-zinc-100 pt-4">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-400">
+                  Retrieved sources
+                </p>
+                <div className="flex flex-col gap-2">
+                  {sources.map((s, i) => (
+                    <details key={i} className="group rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2">
+                      <summary className="flex cursor-pointer items-center justify-between text-xs text-zinc-500 marker:content-none">
+                        <span className="font-mono">{s.source}</span>
+                        <span className="ml-3 shrink-0 text-zinc-300">score {s.score.toFixed(2)}</span>
+                      </summary>
+                      <p className="mt-2 text-xs leading-relaxed text-zinc-500">{s.text.slice(0, 300)}…</p>
+                    </details>
+                  ))}
+                </div>
+              </div>
             )}
           </section>
         )}
